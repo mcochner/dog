@@ -99,14 +99,16 @@ output=""
 process_file() {
   local file="$1"
   # Add clear delimiters around each file’s content
-  output+="\n"
-  output+="-----------------------------------------\n"
-  output+="  START OF FILE: $file\n"
-  output+="-----------------------------------------\n"
-  output+="$(cat "$file")\n"
-  output+="-----------------------------------------\n"
-  output+="  END OF FILE: $file\n"
-  output+="-----------------------------------------\n\n"
+  output+="
+-----------------------------------------
+  START OF FILE: $file
+-----------------------------------------
+$(cat "$file")
+-----------------------------------------
+  END OF FILE: $file
+-----------------------------------------
+
+"
 }
 
 # -------------------------------------------------------
@@ -121,8 +123,8 @@ EXCLUDE_PATTERN="${EXCLUDE_PATTERN% -o}"
 
 log_debug "EXCLUDE_PATTERN = '$EXCLUDE_PATTERN'"
 
-# Use the pattern in a find command that prunes matching directories
-# The final -type f -print captures all files outside blacklisted directories
+# Use the pattern in a find command that prunes matching directories.
+# We must double-escape parentheses so that they survive the eval and the shell.
 while IFS= read -r file; do
   process_file "$file"
 done < <(eval "find \"$dir\" \\( $EXCLUDE_PATTERN \\) -prune -o -type f -print")
@@ -134,7 +136,7 @@ done < <(eval "find \"$dir\" \\( $EXCLUDE_PATTERN \\) -prune -o -type f -print")
 if $copy_to_clipboard; then
   if [[ -n "$CLIP_CMD" ]]; then
     log_debug "Copying output to clipboard using '$CLIP_CMD'"
-    echo -e "$output" | eval "$CLIP_CMD"
+    echo "$output" | eval "$CLIP_CMD"
     echo "All content copied to clipboard."
 
     # ---------------------------------------------------
@@ -149,5 +151,5 @@ if $copy_to_clipboard; then
   fi
 else
   # If not copying to clipboard, just print everything to stdout.
-  echo -e "$output"
+  echo "$output"
 fi
