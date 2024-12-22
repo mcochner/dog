@@ -127,12 +127,22 @@ while IFS= read -r file; do
   process_file "$file"
 done < <(eval "find \"$dir\" \\( $EXCLUDE_PATTERN \\) -prune -o -type f -print")
 
-# If -c was used but no suitable clipboard command is found, stop with error.
+# -------------------------------------------------------
+# Handle clipboard copying (if requested).
+# Also show an approximate token count for reference.
+# -------------------------------------------------------
 if $copy_to_clipboard; then
   if [[ -n "$CLIP_CMD" ]]; then
     log_debug "Copying output to clipboard using '$CLIP_CMD'"
     echo -e "$output" | eval "$CLIP_CMD"
     echo "All content copied to clipboard."
+
+    # ---------------------------------------------------
+    # Approximate token count by simple word count
+    # (just to gauge size relative to ChatGPT’s context).
+    # ---------------------------------------------------
+    estimated_tokens=$(echo -n "$output" | wc -w)
+    echo "Words (estimated_tokens) copied to clipboard: $estimated_tokens"
   else
     echo "Error: No suitable clipboard command found. Aborting."
     exit 1
