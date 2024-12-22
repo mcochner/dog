@@ -61,17 +61,50 @@ dog.sh
 
 2. Copy to clipboard:
 ```bash
-dog.sh -c
+% dog.sh -c
+-----------------------------------------
+Processed files:
+./dog.sh
+./LICENSE
+./README.md
+-----------------------------------------
+All content copied to clipboard.
+Words (estimated_tokens) copied to clipboard:     1467
 ```
 
 3. Enable debug logging:
 ```bash
-dog.sh -v
+% dog.sh -v -c
+[DEBUG] DOG_BLACKLIST_DIRS = ''
+[DEBUG] Effective BLACKLIST_DIRS = 'cmake-build-debug cmake-build-debug .idea .git'
+[DEBUG] Clipboard command = 'pbcopy'
+[DEBUG] Copy to clipboard? = 'true'
+[DEBUG] Verbose? = 'true'
+[DEBUG] Target directory = '.'
+[DEBUG] Whitelist enabled? = 'false'
+[DEBUG] EXCLUDE_PATTERN = ' -name "cmake-build-debug" -o -name "cmake-build-debug" -o -name ".idea" -o -name ".git"'
+[DEBUG] Copying output to clipboard using 'pbcopy'
+-----------------------------------------
+Processed files:
+./dog.sh
+./LICENSE
+./README.md
+-----------------------------------------
+All content copied to clipboard.
+Words (estimated_tokens) copied to clipboard:     1404
 ```
 
 4. Specify a directory:
 ```bash
-dog.sh /path/to/directory
+% ./dog.sh -c /Users/cochner/code/dog
+-----------------------------------------
+Processed files:
+/Users/cochner/code/dog/dog.sh
+/Users/cochner/code/dog/LICENSE
+/Users/cochner/code/dog/README.md
+-----------------------------------------
+All content copied to clipboard.
+Words (estimated_tokens) copied to clipboard:     1488
 ```
 
 5. Override blacklist:
@@ -83,9 +116,15 @@ dog.sh
 6. Whitelisting is on:
    This will only list files that match CMakeLists.txt or *.sh (using simple shell-glob matching).
 ```bash
-dog.sh -v --whitelist 'CMakeLists.txt:*.sh' .
+% dog.sh -c --whitelist '*.sh:*.md' .
+-----------------------------------------
+Processed files:
+./dog.sh
+./README.md
+-----------------------------------------
+All content copied to clipboard.
+Words (estimated_tokens) copied to clipboard:     1325
 ```
-
 
 # Authors:
 - Martin | https://github.com/mcochner - Author

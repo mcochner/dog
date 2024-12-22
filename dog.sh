@@ -69,12 +69,21 @@ log_debug() {
   fi
 }
 
+echo_processed_files(){
+    # print the processed files to stdout as well
+    echo "-----------------------------------------"
+    echo "Processed files:"
+    for f in "${processed_files[@]}"; do
+      echo "$f"
+    done
+    echo "-----------------------------------------"
+}
+
+# Keep track of processed files
+processed_files=()
+
 # ------------------------------------------------------------------
 # Parse command-line arguments:
-#   We'll do a two-step approach:
-#    1) Use a 'while [[ $# -gt 0 ]]' style to capture long opts,
-#       like --whitelist, as well as short opts.
-#    2) Shift through the args as we process them.
 # ------------------------------------------------------------------
 dir="."  # Default directory
 while [[ $# -gt 0 ]]; do
@@ -136,6 +145,7 @@ output=""
 # Function that handles a single file
 process_file() {
   local file="$1"
+  processed_files+=("$file")  # Record the file name
   output+="
 -----------------------------------------
   START OF FILE: $file
@@ -194,6 +204,8 @@ if $copy_to_clipboard; then
   if [[ -n "$CLIP_CMD" ]]; then
     log_debug "Copying output to clipboard using '$CLIP_CMD'"
     echo "$output" | eval "$CLIP_CMD"
+    # print the processed files to stdout as well
+    echo_processed_files
     echo "All content copied to clipboard."
 
     # Approximate token count by simple word count
@@ -206,4 +218,6 @@ if $copy_to_clipboard; then
 else
   # If not copying to clipboard, just print everything to stdout.
   echo "$output"
+  # print the processed files to stdout as well
+  echo_processed_files
 fi
