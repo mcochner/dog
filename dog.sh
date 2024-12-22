@@ -20,7 +20,7 @@
 # -------------------------------------------------------
 
 # Default blacklisted directories as a colon-separated list
-DEFAULT_BLACKLIST_DIRS="cmake-build-debug:cmake-build-debug:.idea"
+DEFAULT_BLACKLIST_DIRS="cmake-build-debug:cmake-build-debug:.idea:.git"
 
 # If DOG_BLACKLIST_DIRS is set, parse it as a colon-separated list.
 # Otherwise, fall back to the default.

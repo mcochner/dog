@@ -10,7 +10,7 @@
 # Features
 
 1. **Blacklist Directories**
-    - By default, ignores `cmake-build-debug`, `cmake-build-release` and `.idea`.
+    - By default, ignores `cmake-build-debug:cmake-build-release:.idea:.git`.
     - Override by setting `DOG_BLACKLIST_DIRS` (colon-separated list).
 
 2. **Clipboard Support**
@@ -21,10 +21,25 @@
     - Turn on debug logs with `-v`.
     - Helpful for seeing how blacklist patterns, environment variables, and commands are set.
 
+# Installation
+To install:
+
+Clone this repository or download dog.sh directly.
+
+Place it in your PATH, for instance:
+```bash
+sudo cp dog.sh /usr/local/bin/dog
+```
+
+Alternatively, you can place it in your local bin directory:
+```bash
+cp dog.sh "${HOME}/.local/bin/dog.sh"
+```
+
 # Usage
 
 ```bash
-./dog.sh [OPTIONS] [DIRECTORY]
+dog.sh [OPTIONS] [DIRECTORY]
 Where:
 
 -c: Copy the combined output to the clipboard (requires pbcopy, xclip, or xsel).
@@ -36,43 +51,28 @@ Example command invocations:
 
 1. Basic usage (no clipboard, default blacklist):
 ```bash
-./dog.sh
+dog.sh
 ```
 
 2. Copy to clipboard:
 ```bash
-./dog.sh -c
+dog.sh -c
 ```
 
 3. Enable debug logging:
 ```bash
-./dog.sh -v
+dog.sh -v
 ```
 
 4. Specify a directory:
 ```bash
-./dog.sh /path/to/directory
+dog.sh /path/to/directory
 ```
 
 5. Override blacklist:
 ```bash
 export DOG_BLACKLIST_DIRS="vendor:node_modules"
-./dog.sh
-```
-
-# Installation
-To install:
-
-Clone this repository or download dog.sh directly.
-
-Place it in your PATH, for instance:
-```bash
-sudo mv dog.sh /usr/local/bin/dog
-```
-
-Alternatively, you can place it in your local bin directory:
-```bash
-mv dog.sh "${HOME}/.local/bin"
+dog.sh
 ```
 
 
