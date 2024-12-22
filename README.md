@@ -2,41 +2,39 @@
 
 **dog.sh** is a Bash script that:
 - Recursively lists files within a target directory (default: current directory).
-- Ignores blacklisted directories (set via environment variable or defaults).
+- Skips “excluded” paths (set via an environment variable or defaults).
 - Prints the contents of each file with clear delimiters.
 - Optionally copies the concatenated output to your system clipboard (if a suitable command is available).
 - Supports verbose debugging mode.
 
 # Features
 
-1. **Blacklist Directories**
-    - By default, ignores `cmake-build-debug:cmake-build-release:.idea:.git`.
-    - Override by setting `DOG_BLACKLIST_DIRS` (colon-separated list).
+1. **Exclude Paths**
+   - By default, skips `cmake-build-debug:cmake-build-release:.idea:.git`.
+   - Override by setting the environment variable `DOG_EXCLUDE_PATHS` (colon-separated list).
 
-2. **Clipboard Support**
-    - Tries `pbcopy`, `xclip`, then `xsel` in that order.
-    - Fails with an error if `-c` is used but no supported command is found.
+2. **Include Patterns**
+   - Use -i or --include to specify file patterns (shell-glob) to only process. For example, --include '*.sh:*.txt'
+   - If no patterns are specified, the script processes **all** files (except those under excluded paths).
 
-3. **Verbose Logging**
-    - Turn on debug logs with `-v`.
-    - Helpful for seeing how blacklist patterns, environment variables, and commands are set.
+3. **Clipboard Support**
+   - Attempts `pbcopy`, `xclip`, then `xsel` in that order.
+   - Fails with an error if `-c` is used but no supported command is found.
 
-4. **Whitelist Files**
-    - Use `--whitelist` to specify files to include.
-    - Supports simple shell-glob matching (e.g., `*.sh`).
-    - Allows multiple patterns separated by colons. (e.g. `--whitelist '*.sh:*.txt'`)
+4. **Verbose Logging**
+   - Enable debug logs with -v.
+   - Helpful for seeing how exclude paths, environment variables, and commands are set.
+
 
 # Installation
 To install:
 
-Clone this repository or download dog.sh directly.
-
-Place it in your PATH, for instance:
+Clone this repository or download dog.sh directly. Then place it somewhere on your PATH:
 ```bash
-sudo cp dog.sh /usr/local/bin/dog
+sudo cp dog.sh /usr/local/bin/dog.sh
 ```
 
-Alternatively, you can place it in your local bin directory:
+Or install it locally:
 ```bash
 cp dog.sh "${HOME}/.local/bin/dog.sh"
 ```
@@ -45,23 +43,28 @@ cp dog.sh "${HOME}/.local/bin/dog.sh"
 
 ```bash
 dog.sh [OPTIONS] [DIRECTORY]
-Where:
 
--c: Copy the combined output to the clipboard (requires pbcopy, xclip, or xsel).
--v: Enable verbose (debug) mode.
-[DIRECTORY]: Directory to search (defaults to . if not specified).
+Where:
+  -c,               Copy the combined output to the clipboard (requires pbcopy, xclip, or xsel).
+  -v, --verbose     Enable verbose (debug) mode.
+  -i, --include     Colon-separated file patterns to ONLY include (e.g. '*.sh:*.md').
+  [DIRECTORY]       Directory to search (defaults to '.' if not specified).
 ```
 
-Example command invocations:
+## Examples
 
-1. Basic usage (no clipboard, default blacklist):
+#### 1. Basic usage (no clipboard, using default exclude paths):
 ```bash
 dog.sh
 ```
 
-2. Copy to clipboard:
+#### 2. Copy to clipboard:
 ```bash
-% dog.sh -c
+dog.sh -c
+```
+
+Sample output:
+```
 -----------------------------------------
 Processed files:
 ./dog.sh
@@ -72,59 +75,43 @@ All content copied to clipboard.
 Words (estimated_tokens) copied to clipboard:     1467
 ```
 
-3. Enable debug logging:
+#### 3. Enable debug logging:
 ```bash
-% dog.sh -v -c
-[DEBUG] DOG_BLACKLIST_DIRS = ''
-[DEBUG] Effective BLACKLIST_DIRS = 'cmake-build-debug cmake-build-debug .idea .git'
+dog.sh -v -c
+```
+Sample output:
+```
+[DEBUG] DOG_EXCLUDE_PATHS = ''
+[DEBUG] Effective EXCLUDE_PATHS = 'cmake-build-debug cmake-build-release .idea .git'
 [DEBUG] Clipboard command = 'pbcopy'
 [DEBUG] Copy to clipboard? = 'true'
 [DEBUG] Verbose? = 'true'
 [DEBUG] Target directory = '.'
-[DEBUG] Whitelist enabled? = 'false'
-[DEBUG] EXCLUDE_PATTERN = ' -name "cmake-build-debug" -o -name "cmake-build-debug" -o -name ".idea" -o -name ".git"'
+[DEBUG] Use include patterns? = 'false'
+[DEBUG] EXCLUDE_PATTERN = ' -name "cmake-build-debug" -o -name "cmake-build-release" -o -name ".idea" -o -name ".git"'
 [DEBUG] Copying output to clipboard using 'pbcopy'
------------------------------------------
-Processed files:
-./dog.sh
-./LICENSE
-./README.md
------------------------------------------
-All content copied to clipboard.
-Words (estimated_tokens) copied to clipboard:     1404
+...
 ```
 
-4. Specify a directory:
+#### 4. Specify a directory:
 ```bash
-% ./dog.sh -c /Users/cochner/code/dog
------------------------------------------
-Processed files:
-/Users/cochner/code/dog/dog.sh
-/Users/cochner/code/dog/LICENSE
-/Users/cochner/code/dog/README.md
------------------------------------------
-All content copied to clipboard.
-Words (estimated_tokens) copied to clipboard:     1488
+dog.sh -c /path/to/code
 ```
+This will process all files under /path/to/code (except those in excluded paths).
 
-5. Override blacklist:
+#### 5. Override excluded paths:
 ```bash
-export DOG_BLACKLIST_DIRS="vendor:node_modules"
-dog.sh
+export DOG_EXCLUDE_PATHS=".idea:.git:tmp"
+dog.sh -c -v
 ```
+Now the script will skip tmp in addition to .idea and .git.
 
-6. Whitelisting is on:
-   This will only list files that match CMakeLists.txt or *.sh (using simple shell-glob matching).
+#### 6. Include patterns:
 ```bash
-% dog.sh -c --whitelist '*.sh:*.md' .
------------------------------------------
-Processed files:
-./dog.sh
-./README.md
------------------------------------------
-All content copied to clipboard.
-Words (estimated_tokens) copied to clipboard:     1325
+dog.sh -c -i '*.sh:*.md'
 ```
+This includes only .sh and .md files (again skipping excluded paths).
+
 
 # Authors:
 - Martin | https://github.com/mcochner - Author

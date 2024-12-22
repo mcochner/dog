@@ -5,51 +5,51 @@
 #
 # Description:
 #   Recursively lists all files in the given directory
-#   (default: current directory), ignoring blacklisted
-#   directories, and prints the file name and contents.
+#   (default: current directory), ignoring excluded paths,
+#   and prints the file name and contents.
 #   Optionally copies the combined output to the clipboard.
-#   Optionally *only* includes files if they match a whitelist
-#   provided via the command line argument (-w / --whitelist).
+#   Optionally only includes files if they match patterns
+#   provided via the command line argument (-i / --include).
 #
 # Usage:
-#   ./dog.sh [-c] [-v] [-V] [-w <pattern1:pattern2:...>] [directory]
+#   ./dog.sh [-c] [-v] [-V] [-i <pattern1:pattern2:...>] [directory]
 #       -c                     Copy output to clipboard
 #       -v, --verbose          Enable verbose debug logging
 #       -V, --version          Print script version and exit
-#       -w, --whitelist <str>  Colon-separated file patterns to ONLY include
+#       -i, --include <str>    Colon-separated file patterns to ONLY include
 #       [directory]            Directory to search (defaults to '.')
 #
 # Example:
-#   ./dog.sh -c -v -w 'CMakeLists.txt:*.sh' .
+#   ./dog.sh -c -v -i 'CMakeLists.txt:*.sh' .
 #
 # Notes:
 #   - You can supply multiple patterns, separated by colons.
 #   - Patterns are shell-glob style (e.g. "*.sh" or "CMakeLists.txt").
-#   - If no whitelist is specified, the script will process ALL files (except blacklisted dirs)
-#   - DOG_BLACKLIST_DIRS env var can be set to customize the default blacklist
+#   - If no include patterns are specified, the script will process ALL files (except excluded paths).
+#   - DOG_EXCLUDE_PATHS env var can be set to customize which paths to skip.
 # -------------------------------------------------------
 
 # -----------------------------------------
 # Add a version identifier here
 # -----------------------------------------
-VERSION="0.0.1"
+VERSION="0.0.2"
 
-# Default blacklisted directories as a colon-separated list
-DEFAULT_BLACKLIST_DIRS="cmake-build-debug:cmake-build-debug:.idea:.git"
+# Default excluded paths as a colon-separated list
+DEFAULT_DOG_EXCLUDE_PATHS="cmake-build-debug:cmake-build-release:.idea:.git"
 
-# If DOG_BLACKLIST_DIRS is set, parse it as a colon-separated list.
+# If DOG_EXCLUDE_PATHS is set, parse it as a colon-separated list.
 # Otherwise, fall back to the default.
-if [[ -n "$DOG_BLACKLIST_DIRS" ]]; then
-  IFS=':' read -ra CUSTOM_DIRS <<< "$DOG_BLACKLIST_DIRS"
-  BLACKLIST_DIRS=("${CUSTOM_DIRS[@]}")
+if [[ -n "$DOG_EXCLUDE_PATHS" ]]; then
+  IFS=':' read -ra CUSTOM_PATHS <<< "$DOG_EXCLUDE_PATHS"
+  EXCLUDE_PATHS=("${CUSTOM_PATHS[@]}")
 else
-  IFS=':' read -ra DEFAULT_DIRS <<< "$DEFAULT_BLACKLIST_DIRS"
-  BLACKLIST_DIRS=("${DEFAULT_DIRS[@]}")
+  IFS=':' read -ra DEFAULT_PATHS <<< "$DEFAULT_DOG_EXCLUDE_PATHS"
+  EXCLUDE_PATHS=("${DEFAULT_PATHS[@]}")
 fi
 
-# -- We'll store whitelist patterns here if provided
-WHITELISTED=false
-WHITELIST_PATTERNS=()
+# We'll store file patterns here if provided
+USE_INCLUDE_PATTERNS=false
+INCLUDE_PATTERNS=()
 
 # Detect the best available clipboard command
 # Priority order: pbcopy -> xclip -> xsel
@@ -76,8 +76,8 @@ log_debug() {
   fi
 }
 
-echo_processed_files(){
-    # print the processed files to stdout as well
+echo_processed_files() {
+    # Print the processed files to stdout
     echo "-----------------------------------------"
     echo "Processed files:"
     for f in "${processed_files[@]}"; do
@@ -107,11 +107,11 @@ while [[ $# -gt 0 ]]; do
       echo "dog.sh version: $VERSION"
       exit 0
       ;;
-    -w|--whitelist)
+    -i|--include)
       # Next argument should be a string of colon-separated patterns
       if [[ -n "$2" && ! "$2" =~ ^- ]]; then
-        IFS=':' read -ra WHITELIST_PATTERNS <<< "$2"
-        WHITELISTED=true
+        IFS=':' read -ra INCLUDE_PATTERNS <<< "$2"
+        USE_INCLUDE_PATTERNS=true
         shift 2
       else
         echo "Error: Missing value after $1"
@@ -119,11 +119,11 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     -h|--help)
-      echo "Usage: $0 [-c] [-v] [-V] [-w <patterns>] [directory]"
+      echo "Usage: $0 [-c] [-v] [-V] [-i <patterns>] [directory]"
       echo "  -c                     Copy output to clipboard"
       echo "  -v, --verbose          Enable verbose debug logging"
       echo "  -V, --version          Print script version and exit"
-      echo "  -w, --whitelist <str>  Colon-separated file patterns (e.g. '*.sh:CMakeLists.txt')"
+      echo "  -i, --include <str>    Colon-separated file patterns (e.g. '*.sh:CMakeLists.txt')"
       echo "  [directory]            Directory to search (defaults to '.')"
       exit 0
       ;;
@@ -140,15 +140,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Log debug messages about our environment/variables
-log_debug "DOG_BLACKLIST_DIRS = '$DOG_BLACKLIST_DIRS'"
-log_debug "Effective BLACKLIST_DIRS = '${BLACKLIST_DIRS[*]}'"
+log_debug "DOG_EXCLUDE_PATHS = '$DOG_EXCLUDE_PATHS'"
+log_debug "Effective EXCLUDE_PATHS = '${EXCLUDE_PATHS[*]}'"
 log_debug "Clipboard command = '$CLIP_CMD'"
 log_debug "Copy to clipboard? = '$copy_to_clipboard'"
 log_debug "Verbose? = '$verbose'"
 log_debug "Target directory = '$dir'"
-log_debug "Whitelist enabled? = '$WHITELISTED'"
-if $WHITELISTED; then
-  log_debug "Whitelist patterns: '${WHITELIST_PATTERNS[*]}'"
+log_debug "Use include patterns? = '$USE_INCLUDE_PATTERNS'"
+if $USE_INCLUDE_PATTERNS; then
+  log_debug "Include patterns: '${INCLUDE_PATTERNS[*]}'"
 fi
 
 # We'll build our output in a variable so we can optionally copy it
@@ -171,11 +171,11 @@ $(cat "$file")
 }
 
 # -------------------------------------------------------
-# Build the find command to prune blacklisted directories.
+# Build the find command to prune excluded paths.
 # -------------------------------------------------------
 EXCLUDE_PATTERN=""
-for d in "${BLACKLIST_DIRS[@]}"; do
-  EXCLUDE_PATTERN="$EXCLUDE_PATTERN -name \"$d\" -o"
+for path in "${EXCLUDE_PATHS[@]}"; do
+  EXCLUDE_PATTERN="$EXCLUDE_PATTERN -name \"$path\" -o"
 done
 # Remove the trailing '-o'
 EXCLUDE_PATTERN="${EXCLUDE_PATTERN% -o}"
@@ -183,12 +183,12 @@ EXCLUDE_PATTERN="${EXCLUDE_PATTERN% -o}"
 log_debug "EXCLUDE_PATTERN = '$EXCLUDE_PATTERN'"
 
 # Use the pattern in a find command that prunes matching directories.
-# We must double-escape parentheses so that they survive the eval and the shell.
+# We must double-escape parentheses so they survive both eval and the shell.
 while IFS= read -r file; do
-  # If whitelisting is on, check if this file matches at least one pattern
-  if $WHITELISTED; then
+  # If include patterns are on, check if this file matches at least one pattern
+  if $USE_INCLUDE_PATTERNS; then
     matched=false
-    for pattern in "${WHITELIST_PATTERNS[@]}"; do
+    for pattern in "${INCLUDE_PATTERNS[@]}"; do
       # For a shell-glob match across the *full path*:
       if [[ "$file" == $pattern ]]; then
         matched=true
@@ -216,7 +216,7 @@ if $copy_to_clipboard; then
   if [[ -n "$CLIP_CMD" ]]; then
     log_debug "Copying output to clipboard using '$CLIP_CMD'"
     echo "$output" | eval "$CLIP_CMD"
-    # print the processed files to stdout as well
+    # Print the processed files to stdout
     echo_processed_files
     echo "All content copied to clipboard."
 
@@ -230,6 +230,5 @@ if $copy_to_clipboard; then
 else
   # If not copying to clipboard, just print everything to stdout.
   echo "$output"
-  # print the processed files to stdout as well
   echo_processed_files
 fi
