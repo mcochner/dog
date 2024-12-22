@@ -21,6 +21,11 @@
     - Turn on debug logs with `-v`.
     - Helpful for seeing how blacklist patterns, environment variables, and commands are set.
 
+4. **Whitelist Files**
+    - Use `--whitelist` to specify files to include.
+    - Supports simple shell-glob matching (e.g., `*.sh`).
+    - Allows multiple patterns separated by colons. (e.g. `--whitelist '*.sh:*.txt'`)
+
 # Installation
 To install:
 
@@ -73,6 +78,12 @@ dog.sh /path/to/directory
 ```bash
 export DOG_BLACKLIST_DIRS="vendor:node_modules"
 dog.sh
+```
+
+6. Whitelisting is on:
+   This will only list files that match CMakeLists.txt or *.sh (using simple shell-glob matching).
+```bash
+dog.sh -v --whitelist 'CMakeLists.txt:*.sh' .
 ```
 
 

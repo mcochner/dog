@@ -8,15 +8,23 @@
 #   (default: current directory), ignoring blacklisted
 #   directories, and prints the file name and contents.
 #   Optionally copies the combined output to the clipboard.
+#   Optionally *only* includes files if they match a whitelist
+#   provided via the command line argument (-w / --whitelist).
 #
 # Usage:
-#   ./dog.sh [-c] [-v] [directory]
-#       -c           Copy output to clipboard
-#       -v           Enable verbose debug logging
-#       [directory]  Directory to search (defaults to '.')
+#   ./dog.sh [-c] [-v] [-w <pattern1:pattern2:...>] [directory]
+#       -c                     Copy output to clipboard
+#       -v                     Enable verbose debug logging
+#       -w, --whitelist <str>  Colon-separated file patterns to ONLY include
+#       [directory]            Directory to search (defaults to '.')
 #
 # Example:
-#   ./dog.sh -c -v .
+#   ./dog.sh -c -v -w 'CMakeLists.txt:*.sh' .
+#
+# Notes:
+#   - You can supply multiple patterns, separated by colons.
+#   - Patterns are shell-glob style (e.g. "*.sh" or "CMakeLists.txt").
+#   - If no whitelist is specified, the script will process ALL files (except blacklisted dirs).
 # -------------------------------------------------------
 
 # Default blacklisted directories as a colon-separated list
@@ -31,6 +39,10 @@ else
   IFS=':' read -ra DEFAULT_DIRS <<< "$DEFAULT_BLACKLIST_DIRS"
   BLACKLIST_DIRS=("${DEFAULT_DIRS[@]}")
 fi
+
+# -- We'll store whitelist patterns here if provided
+WHITELISTED=false
+WHITELIST_PATTERNS=()
 
 # Detect the best available clipboard command
 # Priority order: pbcopy -> xclip -> xsel
@@ -57,32 +69,54 @@ log_debug() {
   fi
 }
 
-# Parse command-line options
-while getopts "chv" opt; do
-  case "$opt" in
-    c)
+# ------------------------------------------------------------------
+# Parse command-line arguments:
+#   We'll do a two-step approach:
+#    1) Use a 'while [[ $# -gt 0 ]]' style to capture long opts,
+#       like --whitelist, as well as short opts.
+#    2) Shift through the args as we process them.
+# ------------------------------------------------------------------
+dir="."  # Default directory
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c)
       copy_to_clipboard=true
+      shift
       ;;
-    v)
+    -v)
       verbose=true
+      shift
       ;;
-    h)
-      echo "Usage: $0 [-c] [-v] [directory]"
-      echo "  -c           Copy output to the clipboard"
-      echo "  -v           Enable verbose debug logging"
-      echo "  [directory]  Directory to search (defaults to '.')"
+    -w|--whitelist)
+      # Next argument should be a string of colon-separated patterns
+      if [[ -n "$2" && ! "$2" =~ ^- ]]; then
+        IFS=':' read -ra WHITELIST_PATTERNS <<< "$2"
+        WHITELISTED=true
+        shift 2
+      else
+        echo "Error: Missing value after $1"
+        exit 1
+      fi
+      ;;
+    -h|--help)
+      echo "Usage: $0 [-c] [-v] [-w <patterns>] [directory]"
+      echo "  -c                     Copy output to clipboard"
+      echo "  -v                     Enable verbose debug logging"
+      echo "  -w, --whitelist <str>  Colon-separated file patterns (e.g. '*.sh:CMakeLists.txt')"
+      echo "  [directory]            Directory to search (defaults to '.')"
       exit 0
       ;;
-    \?)
-      echo "Error: Invalid option: -$OPTARG"
+    -*)
+      echo "Error: Invalid option: $1"
       exit 1
+      ;;
+    *)
+      # Anything that's not recognized above is presumed to be the directory
+      dir="$1"
+      shift
       ;;
   esac
 done
-shift $((OPTIND - 1))
-
-# Use either the provided directory or '.' if none is given
-dir="${1:-.}"
 
 # Log debug messages about our environment/variables
 log_debug "DOG_BLACKLIST_DIRS = '$DOG_BLACKLIST_DIRS'"
@@ -91,6 +125,10 @@ log_debug "Clipboard command = '$CLIP_CMD'"
 log_debug "Copy to clipboard? = '$copy_to_clipboard'"
 log_debug "Verbose? = '$verbose'"
 log_debug "Target directory = '$dir'"
+log_debug "Whitelist enabled? = '$WHITELISTED'"
+if $WHITELISTED; then
+  log_debug "Whitelist patterns: '${WHITELIST_PATTERNS[*]}'"
+fi
 
 # We'll build our output in a variable so we can optionally copy it
 output=""
@@ -98,7 +136,6 @@ output=""
 # Function that handles a single file
 process_file() {
   local file="$1"
-  # Add clear delimiters around each file’s content
   output+="
 -----------------------------------------
   START OF FILE: $file
@@ -126,6 +163,26 @@ log_debug "EXCLUDE_PATTERN = '$EXCLUDE_PATTERN'"
 # Use the pattern in a find command that prunes matching directories.
 # We must double-escape parentheses so that they survive the eval and the shell.
 while IFS= read -r file; do
+  # If whitelisting is on, check if this file matches at least one pattern
+  if $WHITELISTED; then
+    matched=false
+    for pattern in "${WHITELIST_PATTERNS[@]}"; do
+      # For a shell-glob match across the *full path*:
+      if [[ "$file" == $pattern ]]; then
+        matched=true
+        break
+      fi
+      # Alternatively, if you only want to match basenames:
+      # if [[ "$(basename "$file")" == $pattern ]]; then
+      #   matched=true
+      #   break
+      # fi
+    done
+    if ! $matched; then
+      continue  # Skip this file if it doesn't match any pattern
+    fi
+  fi
+
   process_file "$file"
 done < <(eval "find \"$dir\" \\( $EXCLUDE_PATTERN \\) -prune -o -type f -print")
 
@@ -139,10 +196,7 @@ if $copy_to_clipboard; then
     echo "$output" | eval "$CLIP_CMD"
     echo "All content copied to clipboard."
 
-    # ---------------------------------------------------
     # Approximate token count by simple word count
-    # (just to gauge size relative to ChatGPT’s context).
-    # ---------------------------------------------------
     estimated_tokens=$(echo -n "$output" | wc -w)
     echo "Words (estimated_tokens) copied to clipboard: $estimated_tokens"
   else
