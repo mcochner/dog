@@ -12,9 +12,10 @@
 #   provided via the command line argument (-w / --whitelist).
 #
 # Usage:
-#   ./dog.sh [-c] [-v] [-w <pattern1:pattern2:...>] [directory]
+#   ./dog.sh [-c] [-v] [-V] [-w <pattern1:pattern2:...>] [directory]
 #       -c                     Copy output to clipboard
-#       -v                     Enable verbose debug logging
+#       -v, --verbose          Enable verbose debug logging
+#       -V, --version          Print script version and exit
 #       -w, --whitelist <str>  Colon-separated file patterns to ONLY include
 #       [directory]            Directory to search (defaults to '.')
 #
@@ -24,8 +25,14 @@
 # Notes:
 #   - You can supply multiple patterns, separated by colons.
 #   - Patterns are shell-glob style (e.g. "*.sh" or "CMakeLists.txt").
-#   - If no whitelist is specified, the script will process ALL files (except blacklisted dirs).
+#   - If no whitelist is specified, the script will process ALL files (except blacklisted dirs)
+#   - DOG_BLACKLIST_DIRS env var can be set to customize the default blacklist
 # -------------------------------------------------------
+
+# -----------------------------------------
+# Add a version identifier here
+# -----------------------------------------
+VERSION="0.0.1"
 
 # Default blacklisted directories as a colon-separated list
 DEFAULT_BLACKLIST_DIRS="cmake-build-debug:cmake-build-debug:.idea:.git"
@@ -92,9 +99,13 @@ while [[ $# -gt 0 ]]; do
       copy_to_clipboard=true
       shift
       ;;
-    -v)
+    -v|--verbose)
       verbose=true
       shift
+      ;;
+    -V|--version)
+      echo "dog.sh version: $VERSION"
+      exit 0
       ;;
     -w|--whitelist)
       # Next argument should be a string of colon-separated patterns
@@ -108,9 +119,10 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     -h|--help)
-      echo "Usage: $0 [-c] [-v] [-w <patterns>] [directory]"
+      echo "Usage: $0 [-c] [-v] [-V] [-w <patterns>] [directory]"
       echo "  -c                     Copy output to clipboard"
-      echo "  -v                     Enable verbose debug logging"
+      echo "  -v, --verbose          Enable verbose debug logging"
+      echo "  -V, --version          Print script version and exit"
       echo "  -w, --whitelist <str>  Colon-separated file patterns (e.g. '*.sh:CMakeLists.txt')"
       echo "  [directory]            Directory to search (defaults to '.')"
       exit 0
