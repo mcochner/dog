@@ -4,7 +4,7 @@
 # Script: dog.sh
 #
 # Description:
-#   Recursively lists all files in the given directory
+#   Recursively lists all text files in the given directory
 #   (default: current directory), ignoring excluded paths,
 #   and prints the file name and contents.
 #   Optionally copies the combined output to the clipboard.
@@ -19,23 +19,29 @@
 #       -i, --include <str>    Colon-separated file patterns to ONLY include
 #       [directory]            Directory to search (defaults to '.')
 #
+# Environment Variables:
+#   - DOG_EXCLUDE_PATHS: colon-separated list of directories to exclude
+#   - DOG_MAX_FILE_SIZE: integer (bytes). If set, skip files larger than this.
+#                        If not set, defaults to 1 MB (1048576 bytes).
+#
 # Example:
 #   ./dog.sh -c -v -i 'CMakeLists.txt:*.sh' .
 #
 # Notes:
-#   - You can supply multiple patterns, separated by colons.
+#   - If no include patterns are specified, the script processes ALL files
+#     (except excluded paths).
 #   - Patterns are shell-glob style (e.g. "*.sh" or "CMakeLists.txt").
-#   - If no include patterns are specified, the script will process ALL files (except excluded paths).
-#   - DOG_EXCLUDE_PATHS env var can be set to customize which paths to skip.
+#   - By default, the script uses a simple heuristic to skip binary files.
+#   - If DOG_MAX_FILE_SIZE is set, files larger than that size are skipped.
 # -------------------------------------------------------
 
-# -----------------------------------------
-# Add a version identifier here
-# -----------------------------------------
-VERSION="0.0.2"
+VERSION="0.0.3"
 
 # Default excluded paths as a colon-separated list
 DEFAULT_DOG_EXCLUDE_PATHS="cmake-build-debug:cmake-build-release:.idea:.git"
+# Default maximum file size (1 MB) if not set
+DEFAULT_DOG_MAX_FILE_SIZE=1048576
+
 
 # If DOG_EXCLUDE_PATHS is set, parse it as a colon-separated list.
 # Otherwise, fall back to the default.
@@ -45,6 +51,11 @@ if [[ -n "$DOG_EXCLUDE_PATHS" ]]; then
 else
   IFS=':' read -ra DEFAULT_PATHS <<< "$DEFAULT_DOG_EXCLUDE_PATHS"
   EXCLUDE_PATHS=("${DEFAULT_PATHS[@]}")
+fi
+
+
+if [[ -z "$DOG_MAX_FILE_SIZE" ]]; then
+  DOG_MAX_FILE_SIZE="$DEFAULT_DOG_MAX_FILE_SIZE"
 fi
 
 # We'll store file patterns here if provided
@@ -69,7 +80,10 @@ copy_to_clipboard=false
 # By default, verbose logging is off
 verbose=false
 
-# A helper function to log debug messages if verbose is enabled
+# Keep track of processed files
+processed_files=()
+
+# A helper function for debug logging
 log_debug() {
   if $verbose; then
     echo "[DEBUG] $*"
@@ -77,17 +91,13 @@ log_debug() {
 }
 
 echo_processed_files() {
-    # Print the processed files to stdout
-    echo "-----------------------------------------"
-    echo "Processed files:"
-    for f in "${processed_files[@]}"; do
-      echo "$f"
-    done
-    echo "-----------------------------------------"
+  echo "-----------------------------------------"
+  echo "Processed files:"
+  for f in "${processed_files[@]}"; do
+    echo "$f"
+  done
+  echo "-----------------------------------------"
 }
-
-# Keep track of processed files
-processed_files=()
 
 # ------------------------------------------------------------------
 # Parse command-line arguments:
@@ -108,7 +118,6 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     -i|--include)
-      # Next argument should be a string of colon-separated patterns
       if [[ -n "$2" && ! "$2" =~ ^- ]]; then
         IFS=':' read -ra INCLUDE_PATTERNS <<< "$2"
         USE_INCLUDE_PATTERNS=true
@@ -125,6 +134,12 @@ while [[ $# -gt 0 ]]; do
       echo "  -V, --version          Print script version and exit"
       echo "  -i, --include <str>    Colon-separated file patterns (e.g. '*.sh:CMakeLists.txt')"
       echo "  [directory]            Directory to search (defaults to '.')"
+      echo
+      echo "Environment variables:"
+      echo "  DOG_EXCLUDE_PATHS      Colon-separated directories to exclude."
+      echo "  DOG_MAX_FILE_SIZE      If set, skip files larger than this (in bytes)."
+      echo "                         Defaults to 1 MB (1048576)."
+      echo
       exit 0
       ;;
     -*)
@@ -132,7 +147,6 @@ while [[ $# -gt 0 ]]; do
       exit 1
       ;;
     *)
-      # Anything that's not recognized above is presumed to be the directory
       dir="$1"
       shift
       ;;
@@ -142,6 +156,7 @@ done
 # Log debug messages about our environment/variables
 log_debug "DOG_EXCLUDE_PATHS = '$DOG_EXCLUDE_PATHS'"
 log_debug "Effective EXCLUDE_PATHS = '${EXCLUDE_PATHS[*]}'"
+log_debug "DOG_MAX_FILE_SIZE = '$DOG_MAX_FILE_SIZE'"
 log_debug "Clipboard command = '$CLIP_CMD'"
 log_debug "Copy to clipboard? = '$copy_to_clipboard'"
 log_debug "Verbose? = '$verbose'"
@@ -157,7 +172,37 @@ output=""
 # Function that handles a single file
 process_file() {
   local file="$1"
-  processed_files+=("$file")  # Record the file name
+
+  # Check file size; skip if larger than DOG_MAX_FILE_SIZE
+  local filesize
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    filesize=$(stat -f%z "$file" 2>/dev/null || echo 0)
+  else
+    filesize=$(stat -c%s "$file" 2>/dev/null || echo 0)
+  fi
+
+  if (( filesize > DOG_MAX_FILE_SIZE )); then
+    log_debug "Skipping large file (size: $filesize bytes): $file"
+    return
+  fi
+
+  # Check if readable
+  if [[ ! -r "$file" ]]; then
+    log_debug "Skipping unreadable file: $file"
+    return
+  fi
+
+  # Basic check for binary files (heuristic)
+  local mimetype
+  mimetype=$(file --mime-type -b "$file" 2>/dev/null || true)
+  if [[ $mimetype != text/* ]]; then
+    log_debug "Skipping binary (or non-text) file: $file (mime-type: $mimetype)"
+    return
+  fi
+
+  # If we got here, we consider the file safe to print
+  processed_files+=("$file")
+
   output+="
 -----------------------------------------
   START OF FILE: $file
@@ -166,7 +211,6 @@ $(cat "$file")
 -----------------------------------------
   END OF FILE: $file
 -----------------------------------------
-
 "
 }
 
@@ -183,18 +227,18 @@ EXCLUDE_PATTERN="${EXCLUDE_PATTERN% -o}"
 log_debug "EXCLUDE_PATTERN = '$EXCLUDE_PATTERN'"
 
 # Use the pattern in a find command that prunes matching directories.
-# We must double-escape parentheses so they survive both eval and the shell.
-while IFS= read -r file; do
+# Switch to -print0 and read -r -d '' for robust handling of special chars/spaces.
+while IFS= read -r -d '' file; do
   # If include patterns are on, check if this file matches at least one pattern
   if $USE_INCLUDE_PATTERNS; then
     matched=false
     for pattern in "${INCLUDE_PATTERNS[@]}"; do
-      # For a shell-glob match across the *full path*:
+      # Full-path shell-glob matching
       if [[ "$file" == $pattern ]]; then
         matched=true
         break
       fi
-      # Alternatively, if you only want to match basenames:
+      # Alternatively, to match basenames only:
       # if [[ "$(basename "$file")" == $pattern ]]; then
       #   matched=true
       #   break
@@ -206,11 +250,11 @@ while IFS= read -r file; do
   fi
 
   process_file "$file"
-done < <(eval "find \"$dir\" \\( $EXCLUDE_PATTERN \\) -prune -o -type f -print")
+done < <(eval "find \"$dir\" \\( $EXCLUDE_PATTERN \\) -prune -o -type f -print0")
 
 # -------------------------------------------------------
 # Handle clipboard copying (if requested).
-# Also show an approximate token count for reference.
+# Also show an approximate word count for reference.
 # -------------------------------------------------------
 if $copy_to_clipboard; then
   if [[ -n "$CLIP_CMD" ]]; then
@@ -221,8 +265,8 @@ if $copy_to_clipboard; then
     echo "All content copied to clipboard."
 
     # Approximate token count by simple word count
-    estimated_tokens=$(echo -n "$output" | wc -w)
-    echo "Words (estimated_tokens) copied to clipboard: $estimated_tokens"
+    estimated_words=$(echo -n "$output" | wc -w)
+    echo "Approx. word count copied to clipboard: $estimated_words"
   else
     echo "Error: No suitable clipboard command found. Aborting."
     exit 1
