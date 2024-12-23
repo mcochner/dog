@@ -7,16 +7,19 @@
 #   Recursively lists all text files in the given directory
 #   (default: current directory), ignoring excluded paths,
 #   and prints the file name and contents.
-#   Optionally copies the combined output to the clipboard.
+#   Optionally copies the combined output to the clipboard or a temp file.
 #   Optionally only includes files if they match patterns
 #   provided via the command line argument (-i / --include).
+#   Optionally outputs the file to a temporary directory
+#   with a timestamped filename (-t / --tmp).
 #
 # Usage:
-#   ./dog.sh [-c] [-v] [-V] [-i <pattern1:pattern2:...>] [directory]
+#   ./dog.sh [-c] [-v] [-V] [-i <pattern1:pattern2:...>] [-t] [directory]
 #       -c                     Copy output to clipboard
 #       -v, --verbose          Enable verbose debug logging
 #       -V, --version          Print script version and exit
 #       -i, --include <str>    Colon-separated file patterns to ONLY include
+#       -t, --tmp              Save output to a temporary directory
 #       [directory]            Directory to search (defaults to '.')
 #
 # Environment Variables:
@@ -25,17 +28,17 @@
 #                        If not set, defaults to 1 MB (1048576 bytes).
 #
 # Example:
-#   ./dog.sh -c -v -i 'CMakeLists.txt:*.sh' .
+#   ./dog.sh -c -v -i '*.sh' .
 #
 # Notes:
 #   - If no include patterns are specified, the script processes ALL files
 #     (except excluded paths).
-#   - Patterns are shell-glob style (e.g. "*.sh" or "CMakeLists.txt").
+#   - Patterns are shell-glob style (e.g. '*.sh' or '.*./CMakeLists.txt').
 #   - By default, the script uses a simple heuristic to skip binary files.
-#   - If DOG_MAX_FILE_SIZE is set, files larger than that size are skipped.
+#   - If DOG_MAX_FILE_SIZE is set, files larger than that size are skipped, defaulting to 1 MB.
 # -------------------------------------------------------
 
-VERSION="0.0.3"
+VERSION="0.0.4"
 
 # Default excluded paths as a colon-separated list
 DEFAULT_DOG_EXCLUDE_PATHS="cmake-build-debug:cmake-build-release:.idea:.git"
@@ -80,6 +83,9 @@ copy_to_clipboard=false
 # By default, verbose logging is off
 verbose=false
 
+# By default, do NOT save to a temp file
+tmp_output=false
+
 # Keep track of processed files
 processed_files=()
 
@@ -97,6 +103,12 @@ echo_processed_files() {
     echo "$f"
   done
   echo "-----------------------------------------"
+}
+
+echo_word_count() {
+  # Approximate token count by simple word count
+  estimated_words=$(echo -n "$output" | wc -w)
+  echo "Approx. word count: $estimated_words"
 }
 
 # ------------------------------------------------------------------
@@ -127,12 +139,17 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       ;;
+    -t|--tmp)
+      tmp_output=true
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [-c] [-v] [-V] [-i <patterns>] [directory]"
+      echo "Usage: $0 [-c] [-v] [-V] [-i <patterns>] [-t] [directory]"
       echo "  -c                     Copy output to clipboard"
       echo "  -v, --verbose          Enable verbose debug logging"
       echo "  -V, --version          Print script version and exit"
-      echo "  -i, --include <str>    Colon-separated file patterns (e.g. '*.sh:CMakeLists.txt')"
+      echo "  -i, --include <str>    Colon-separated file patterns (e.g. '*.sh:.*./CMakeLists.txt')"
+      echo "  -t, --tmp              Save output to a temporary directory (with timestamped filename)"
       echo "  [directory]            Directory to search (defaults to '.')"
       echo
       echo "Environment variables:"
@@ -238,11 +255,6 @@ while IFS= read -r -d '' file; do
         matched=true
         break
       fi
-      # Alternatively, to match basenames only:
-      # if [[ "$(basename "$file")" == $pattern ]]; then
-      #   matched=true
-      #   break
-      # fi
     done
     if ! $matched; then
       continue  # Skip this file if it doesn't match any pattern
@@ -252,27 +264,45 @@ while IFS= read -r -d '' file; do
   process_file "$file"
 done < <(eval "find \"$dir\" \\( $EXCLUDE_PATTERN \\) -prune -o -type f -print0")
 
+echo_processed_files
+echo_word_count
+
 # -------------------------------------------------------
-# Handle clipboard copying (if requested).
-# Also show an approximate word count for reference.
+# Handle how we output results:
+#   1) Copy to clipboard if -c is used.
+#   2) Otherwise, print to stdout.
+#   3) Then, if -t is used, also write to a temp file.
 # -------------------------------------------------------
 if $copy_to_clipboard; then
   if [[ -n "$CLIP_CMD" ]]; then
     log_debug "Copying output to clipboard using '$CLIP_CMD'"
     echo "$output" | eval "$CLIP_CMD"
     # Print the processed files to stdout
-    echo_processed_files
     echo "All content copied to clipboard."
-
-    # Approximate token count by simple word count
-    estimated_words=$(echo -n "$output" | wc -w)
-    echo "Approx. word count copied to clipboard: $estimated_words"
   else
     echo "Error: No suitable clipboard command found. Aborting."
     exit 1
   fi
-else
-  # If not copying to clipboard, just print everything to stdout.
+fi
+
+if $tmp_output; then
+  # Create a temp directory. On macOS, `mktemp -d -t dogtmp` might be needed;
+  # on Linux, `mktemp -d` is often sufficient.
+  # We'll do a fallback for portability:
+
+  tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t 'dogtmp')"
+  timestamp="$(date +%Y%m%d_%H%M%S)"
+  tmp_file="dog_output_${timestamp}.txt"
+  echo "$output" > "$tmp_dir/$tmp_file"
+  echo "All content saved to file $tmp_dir/$tmp_file"
+  echo ""
+  echo "To get the output from a remote machine over ssh please run:"
+  echo "ssh $(hostname) cat $tmp_dir/$tmp_file | pbcopy   # from MacOS"
+  echo "ssh $(hostname) cat $tmp_dir/$tmp_file | clip     # from Windows"
+  echo ""
+fi
+
+if ! $copy_to_clipboard && ! $tmp_output; then
+  # If not copying to clipboard or saving to a temp file, just print to stdout
   echo "$output"
-  echo_processed_files
 fi
