@@ -29,15 +29,25 @@
 # Installation
 To install:
 
-Clone this repository or download dog.sh directly. Then place it somewhere on your PATH:
+Download dog.sh directly from the repository:
+```bash
+wget https://raw.githubusercontent.com/mcochner/dog/refs/heads/main/dog.sh
+```
+
+Change the permissions to make it executable:
+```bash
+chmod +x dog.sh
+```
+Then install it locally:
+```bash
+cp dog.sh "${HOME}/.local/bin/dog.sh"
+```
+
+Or place it somewhere on your PATH:
 ```bash
 sudo cp dog.sh /usr/local/bin/dog.sh
 ```
 
-Or install it locally:
-```bash
-cp dog.sh "${HOME}/.local/bin/dog.sh"
-```
 
 # Usage
 
